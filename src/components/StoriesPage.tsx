@@ -158,7 +158,7 @@ export function StoriesPage() {
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-4 pt-6 pb-8 bg-gradient-to-b from-black/60 via-black/30 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-4">
         <button 
           onClick={() => navigate('/')}
           className="p-2 hover:bg-white/10 rounded-full transition-colors"
