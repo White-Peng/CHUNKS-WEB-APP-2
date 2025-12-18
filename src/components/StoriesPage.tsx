@@ -212,5 +212,3 @@ export function StoriesPage() {
     </div>
   );
 }
-
-}
