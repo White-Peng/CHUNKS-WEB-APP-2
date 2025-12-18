@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, useMotionValue, useTransform, PanInfo } from 'motion/react';
+import { motion, useMotionValue, useTransform, animate, PanInfo } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
 
 interface Story {
@@ -43,62 +43,117 @@ const STORIES: Story[] = [
   }
 ];
 
+// Single Story Card Component
+function StoryCard({ story, style }: { story: Story; style?: React.CSSProperties }) {
+  return (
+    <div 
+      className="absolute inset-0 w-full h-full"
+      style={style}
+    >
+      {/* Background Image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${story.image})` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/30 to-black/70"></div>
+      </div>
+
+      {/* Content */}
+      <div className="absolute bottom-0 left-0 right-0 p-8 pb-16">
+        <h1 className="text-white mb-4 drop-shadow-lg">
+          {story.title}
+        </h1>
+        <p className="text-white/90 drop-shadow-lg">
+          {story.description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function StoriesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [stories] = useState(STORIES);
   
+  // Motion values for horizontal and vertical dragging
+  const x = useMotionValue(0);
   const y = useMotionValue(0);
+  
+  // Opacity based on vertical drag (for swipe up effect)
   const opacity = useTransform(y, [-300, 0, 300], [0.5, 1, 0.5]);
 
-  // Set initial index based on consumed stories - recalculate when returning to this page
+  // Set initial index based on consumed stories
   useEffect(() => {
     const consumedStories = JSON.parse(localStorage.getItem('consumedStories') || '[]');
-    // Find the first unconsumed story
     const firstUnconsumedIndex = stories.findIndex(story => !consumedStories.includes(story.id));
     if (firstUnconsumedIndex !== -1) {
       setCurrentIndex(firstUnconsumedIndex);
     } else {
-      // All stories consumed, reset and start from beginning
       localStorage.setItem('consumedStories', JSON.stringify([]));
       setCurrentIndex(0);
     }
-  }, [location]); // Re-run when location changes (when navigating to this page)
+  }, [location, stories]);
 
-  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  // Get visible cards (previous, current, next)
+  const visibleIndices = [
+    currentIndex - 1,
+    currentIndex,
+    currentIndex + 1
+  ].filter(i => i >= 0 && i < stories.length);
+
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const swipeThreshold = 100;
+    const velocity = info.velocity.x;
+    const offset = info.offset.x;
     
-    // Vertical swipe
+    // Check for vertical swipe first (swipe up to dive in)
     if (Math.abs(info.offset.y) > Math.abs(info.offset.x)) {
       if (info.offset.y < -swipeThreshold) {
-        // Swipe up (bottom to top) - Interested/Dive into topic
         navigateToChunks();
+        return;
+      }
+      // Reset y position
+      animate(y, 0, { type: 'spring', stiffness: 300, damping: 30 });
+      return;
+    }
+
+    // Horizontal swipe logic
+    let newIndex = currentIndex;
+    
+    // Determine direction based on offset and velocity
+    if (offset < -swipeThreshold || velocity < -500) {
+      // Swipe left - Next story
+      if (currentIndex < stories.length - 1) {
+        newIndex = currentIndex + 1;
+      }
+    } else if (offset > swipeThreshold || velocity > 500) {
+      // Swipe right - Previous story
+      if (currentIndex > 0) {
+        newIndex = currentIndex - 1;
       }
     }
-    // Horizontal swipe
-    else if (Math.abs(info.offset.x) > swipeThreshold) {
-      if (info.offset.x > 0 && currentIndex > 0) {
-        // Swipe right - Previous story
-        setCurrentIndex(currentIndex - 1);
-      } else if (info.offset.x < 0 && currentIndex < stories.length - 1) {
-        // Swipe left - Next story
-        setCurrentIndex(currentIndex + 1);
+
+    // Animate to new position
+    const targetX = (currentIndex - newIndex) * window.innerWidth;
+    
+    animate(x, targetX, {
+      type: 'spring',
+      stiffness: 300,
+      damping: 30,
+      onComplete: () => {
+        // Update index and reset x position
+        setCurrentIndex(newIndex);
+        x.set(0);
       }
-    }
+    });
   };
 
   const navigateToChunks = () => {
-    // Store current story data for chunks pages
-    localStorage.setItem('currentStory', JSON.stringify(currentStory));
+    localStorage.setItem('currentStory', JSON.stringify(stories[currentIndex]));
     navigate('/chunks');
   };
-
-  const currentStory = stories[currentIndex];
-
-  if (!currentStory) {
-    return null;
-  }
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
@@ -114,45 +169,41 @@ export function StoriesPage() {
         <div className="w-10"></div>
       </div>
 
-      {/* Story Card */}
+      {/* Carousel Container - Draggable */}
       <motion.div
         className="absolute inset-0"
         drag
-        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        dragElastic={0.7}
+        dragConstraints={{ top: 0, bottom: 0, left: 0, right: 0 }}
+        dragElastic={{ left: 0.2, right: 0.2, top: 0.5, bottom: 0.5 }}
         onDragEnd={handleDragEnd}
-        style={{ y, opacity }}
+        style={{ x, y, opacity }}
       >
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${currentStory.image})` }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/30 to-black/70"></div>
-        </div>
-
-        {/* Content */}
-        <div className="absolute bottom-0 left-0 right-0 p-8 pb-16">
-          <h1 className="text-white mb-4 drop-shadow-lg">
-            {currentStory.title}
-          </h1>
-          <p className="text-white/90 drop-shadow-lg">
-            {currentStory.description}
-          </p>
-        </div>
-
-        {/* Progress Indicators */}
-        <div className="absolute top-20 left-0 right-0 flex justify-center gap-2 px-4">
-          {stories.map((_, index) => (
-            <div
-              key={index}
-              className={`h-1 flex-1 rounded-full ${
-                index === currentIndex ? 'bg-white' : 'bg-white/30'
-              }`}
+        {/* Render visible cards (previous, current, next) */}
+        {visibleIndices.map((index) => {
+          const offset = index - currentIndex;
+          return (
+            <StoryCard
+              key={stories[index].id}
+              story={stories[index]}
+              style={{
+                transform: `translateX(${offset * 100}%)`,
+              }}
             />
-          ))}
-        </div>
+          );
+        })}
       </motion.div>
+
+      {/* Progress Indicators */}
+      <div className="absolute top-20 left-0 right-0 flex justify-center gap-2 px-4 z-10">
+        {stories.map((_, index) => (
+          <div
+            key={index}
+            className={`h-1 flex-1 rounded-full transition-colors ${
+              index === currentIndex ? 'bg-white' : 'bg-white/30'
+            }`}
+          />
+        ))}
+      </div>
 
       {/* Swipe Hints */}
       <div className="absolute bottom-4 left-0 right-0 flex justify-center text-white/50 text-sm pointer-events-none z-10">
@@ -160,4 +211,6 @@ export function StoriesPage() {
       </div>
     </div>
   );
+}
+
 }
